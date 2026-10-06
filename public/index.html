@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trends Overview</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Trends Overview</h1>
+  <nav id="regions" aria-label="Region"></nav>
+</header>
+<main>
+  <section>
+    <div class="section-head">
+      <h2>YouTube trending</h2>
+      <input id="yt-filter" type="search" placeholder="Filter videos">
+    </div>
+    <ol id="youtube" class="list"></ol>
+  </section>
+  <section>
+    <div class="section-head">
+      <h2>Google search trends</h2>
+      <input id="gt-filter" type="search" placeholder="Filter searches">
+    </div>
+    <ol id="google" class="list"></ol>
+  </section>
+</main>
+<footer>YouTube data from the YouTube Data API (most popular chart). Google data from the public Google Trends "Trending now" RSS feed. Cached for 10 minutes.</footer>
+<script src="app.js"></script>
+</body>
+</html>
