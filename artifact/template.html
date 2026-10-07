@@ -1,0 +1,285 @@
+<title>YouTube Trend Browser</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a chart-show "countdown" list beside a slim summary rail; rail stacks above the list on phones. */
+:root {
+  --bg: #f3f4f6; --surface: #ffffff; --ink: #16181d; --muted: #5d6471; --line: #e1e4e9;
+  --accent: #cf1f3a; --accent-soft: #fbe7ea; --chip: #eceef2; --bar: #16181d;
+  --c1: #cf1f3a; --c2: #2563c9; --c3: #0f8a6a; --c4: #b86b00; --c5: #7a4bd1; --c6: #c2378f; --c7: #3d7f99; --c8: #6b7280;
+  --display: "Familjen Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --body: "Familjen Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1115; --surface: #171a20; --ink: #eceef2; --muted: #9aa1ad; --line: #292d35;
+  --accent: #ff5a70; --accent-soft: #3a1820; --chip: #22262e; --bar: #eceef2;
+  --c1: #ff5a70; --c2: #6ea1ff; --c3: #3fcf9f; --c4: #f0a63a; --c5: #a88bff; --c6: #f07ac0; --c7: #6cc0dd; --c8: #9aa1ad;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0f1115; --surface: #171a20; --ink: #eceef2; --muted: #9aa1ad; --line: #292d35;
+  --accent: #ff5a70; --accent-soft: #3a1820; --chip: #22262e; --bar: #eceef2;
+  --c1: #ff5a70; --c2: #6ea1ff; --c3: #3fcf9f; --c4: #f0a63a; --c5: #a88bff; --c6: #f07ac0; --c7: #6cc0dd; --c8: #9aa1ad;
+  color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.45 var(--body); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 40px; display: grid; gap: 16px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+h1 { font: 700 26px/1.1 var(--display); margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+h1 .dot { color: var(--accent); }
+.stamp { color: var(--muted); font: 12px var(--mono); }
+.regions { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.regions button { flex: none; font: 500 14px var(--body); border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 12px; border-radius: 8px; cursor: pointer; display: inline-flex; gap: 6px; align-items: baseline; }
+.regions button .code { font: 11px var(--mono); color: var(--muted); }
+.regions button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.regions button[aria-pressed="true"] .code { color: inherit; opacity: .7; }
+.regions .sep { flex: none; width: 1px; background: var(--line); margin: 4px 2px; }
+button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 860px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+aside { display: grid; gap: 16px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); }
+@media (max-width: 860px) { aside { position: static; } .about { display: none; } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 10px; min-width: 0; }
+.label { font: 500 11px var(--mono); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.stat b { display: block; font: 600 20px var(--display); font-variant-numeric: tabular-nums; }
+.stat span { color: var(--muted); font-size: 12px; }
+.cats { display: grid; gap: 4px; }
+.cat { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; align-items: center; width: 100%; text-align: left; border: 0; background: none; color: var(--ink); font: 13px var(--body); padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+.cat:hover { background: var(--chip); }
+.cat[aria-pressed="true"] { background: var(--accent-soft); }
+.cat .n { font: 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.cat .track { grid-column: 1 / -1; height: 4px; background: var(--chip); border-radius: 2px; overflow: hidden; }
+.cat .fill { height: 100%; border-radius: 2px; }
+.note { color: var(--muted); font-size: 12px; line-height: 1.5; margin: 0; }
+
+.tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.tools input, .tools select { font: 14px var(--body); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.tools input { flex: 1 1 220px; min-width: 0; }
+.tools .count { color: var(--muted); font: 12px var(--mono); margin-left: auto; }
+.active-filter { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; background: var(--accent-soft); border-radius: 999px; padding: 4px 6px 4px 10px; }
+.active-filter button { border: 0; background: none; color: var(--ink); cursor: pointer; font: 16px/1 var(--body); padding: 0 4px; }
+
+ol.chart { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+ol.chart > li { display: grid; grid-template-columns: 52px minmax(0, 1fr) 150px; gap: 4px 14px; padding: 12px 14px; border-top: 1px solid var(--line); align-items: start; }
+ol.chart > li:first-child { border-top: 0; }
+.pos { font: 600 22px/1.1 var(--display); font-variant-numeric: tabular-nums; text-align: right; }
+.pos small { display: block; font: 11px var(--mono); color: var(--muted); margin-top: 2px; }
+.top3 .pos { color: var(--accent); }
+.main { min-width: 0; display: grid; gap: 3px; }
+.title { font: 600 15.5px/1.3 var(--display); color: var(--ink); text-decoration: none; overflow-wrap: anywhere; }
+.title:hover { text-decoration: underline; text-decoration-color: var(--accent); }
+.channel { color: var(--muted); font-size: 13px; text-decoration: none; }
+.channel:hover { color: var(--ink); }
+.meta { display: flex; flex-wrap: wrap; gap: 4px 10px; font: 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.chip { font: 12px var(--body); background: var(--chip); border-radius: 4px; padding: 1px 7px; color: var(--ink); border: 0; cursor: pointer; display: inline-flex; gap: 5px; align-items: center; }
+.chip i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.flag { font: 11px var(--mono); background: transparent; border: 1px solid var(--line); color: var(--muted); border-radius: 4px; padding: 0 5px; }
+.flag.here { border-color: var(--ink); color: var(--ink); }
+.nums { display: grid; gap: 6px; text-align: right; }
+.nums b { font: 600 17px var(--display); font-variant-numeric: tabular-nums; display: block; }
+.nums span { font: 11px var(--mono); color: var(--muted); }
+.vel { height: 4px; background: var(--chip); border-radius: 2px; overflow: hidden; }
+.vel div { height: 100%; background: var(--accent); border-radius: 2px; }
+@media (max-width: 560px) {
+  ol.chart > li { grid-template-columns: 34px minmax(0, 1fr); }
+  .pos { font-size: 18px; }
+  .nums { grid-column: 2; text-align: left; grid-template-columns: auto 1fr; align-items: center; gap: 2px 10px; }
+  .nums b { font-size: 15px; display: inline; }
+}
+.empty { padding: 28px; text-align: center; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) { .vel div { transition: width .3s ease; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>YouTube Trend Browser<span class="dot">.</span></h1>
+    <div class="stamp" id="stamp"></div>
+  </header>
+  <nav class="regions" id="regions" aria-label="Region"></nav>
+  <div class="layout">
+    <aside>
+      <div class="panel">
+        <div class="label" id="summary-label">Summary</div>
+        <div class="stats" id="stats"></div>
+      </div>
+      <div class="panel">
+        <div class="label">Categories</div>
+        <div class="cats" id="cats"></div>
+      </div>
+      <div class="panel about">
+        <p class="note">Each country's list is YouTube's own "Trending" chart (top 50). Europe ranks videos by how many of the 11 European charts they appear in, then by their best position. Views per hour is total views divided by hours since upload.</p>
+      </div>
+    </aside>
+    <section style="display:grid; gap:10px; min-width:0">
+      <div class="tools">
+        <input id="q" type="search" placeholder="Search titles and channels" aria-label="Search titles and channels">
+        <select id="sort" aria-label="Sort by">
+          <option value="rank">Chart position</option>
+          <option value="views">Most views</option>
+          <option value="vel">Fastest growing (views/hour)</option>
+          <option value="new">Newest upload</option>
+          <option value="like">Highest like rate</option>
+          <option value="reach">Trending in most countries</option>
+        </select>
+        <span id="filter-slot"></span>
+        <span class="count" id="count"></span>
+      </div>
+      <ol class="chart" id="chart"></ol>
+    </section>
+  </div>
+</div>
+
+<script>
+const DATA = /*__DATA__*/null;
+const EUROPE = Object.keys(DATA.regions).filter((r) => r !== 'US');
+const $ = (id) => document.getElementById(id);
+const nf = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
+const esc = (s = '') => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
+const fetched = new Date(DATA.fetchedAt);
+
+const hash = location.hash.slice(1).toUpperCase();
+const state = {
+  region: (hash === 'EU' || DATA.regions[hash]) ? hash : (store.get('yt-region') || 'SE'),
+  sort: store.get('yt-sort') || 'rank',
+  cat: null,
+  q: '',
+};
+if (state.region !== 'EU' && !DATA.regions[state.region]) state.region = 'SE';
+
+// Which charts each video is in, and at what position.
+const where = {};
+for (const [r, ids] of Object.entries(DATA.charts)) ids.forEach((id, i) => { (where[id] ||= {})[r] = i + 1; });
+
+const catIds = Object.keys(DATA.categories);
+const catColor = {};
+let ci = 0;
+function colorFor(k) { return catColor[k] ||= `var(--c${(ci++ % 8) + 1})`; }
+
+function rows() {
+  let list;
+  if (state.region === 'EU') {
+    list = Object.keys(DATA.videos).filter((id) => EUROPE.some((r) => where[id][r]))
+      .map((id) => {
+        const ranks = EUROPE.map((r) => where[id][r]).filter(Boolean);
+        return { id, reach: ranks.length, best: Math.min(...ranks) };
+      })
+      .sort((a, b) => b.reach - a.reach || a.best - b.best)
+      .map((r, i) => ({ ...r, pos: i + 1 }));
+  } else {
+    list = DATA.charts[state.region].map((id, i) => ({ id, pos: i + 1 }));
+  }
+  return list.map((r) => {
+    const v = DATA.videos[r.id];
+    const hours = Math.max(1, (fetched - new Date(v.p)) / 36e5);
+    return { ...r, v, hours, vel: v.v / hours, like: v.v ? v.l / v.v : 0,
+      reachAll: Object.keys(where[r.id]).length };
+  });
+}
+
+function ago(h) {
+  if (h < 48) return `${Math.round(h)}h ago`;
+  if (h < 24 * 60) return `${Math.round(h / 24)}d ago`;
+  return `${Math.round(h / 24 / 30)}mo ago`;
+}
+function dur(s) {
+  if (!s) return '';
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+  return h ? `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}` : `${m}:${String(x).padStart(2, '0')}`;
+}
+
+function renderRegions() {
+  const order = ['SE', 'US', 'EU', ...EUROPE.filter((r) => r !== 'SE')];
+  $('regions').innerHTML = order.map((r, i) =>
+    (i === 3 ? '<span class="sep"></span>' : '') +
+    `<button data-r="${r}" aria-pressed="${r === state.region}">${r === 'EU' ? 'Europe' : esc(DATA.regions[r])}<span class="code">${r}</span></button>`).join('');
+}
+
+function render() {
+  const all = rows();
+  const q = state.q.trim().toLowerCase();
+  let list = all.filter((r) => (!state.cat || r.v.k === state.cat) &&
+    (!q || r.v.t.toLowerCase().includes(q) || r.v.c.toLowerCase().includes(q)));
+  const sorters = {
+    rank: (a, b) => a.pos - b.pos,
+    views: (a, b) => b.v.v - a.v.v,
+    vel: (a, b) => b.vel - a.vel,
+    new: (a, b) => new Date(b.v.p) - new Date(a.v.p),
+    like: (a, b) => b.like - a.like,
+    reach: (a, b) => b.reachAll - a.reachAll || a.pos - b.pos,
+  };
+  list = [...list].sort(sorters[state.sort]);
+  const maxVel = Math.max(...all.map((r) => r.vel), 1);
+  const regionName = state.region === 'EU' ? 'Europe' : DATA.regions[state.region];
+
+  // Summary
+  $('summary-label').textContent = `${regionName} right now`;
+  const totalViews = all.reduce((s, r) => s + r.v.v, 0);
+  const medianAge = all.map((r) => r.hours).sort((a, b) => a - b)[Math.floor(all.length / 2)] || 0;
+  const shared = all.filter((r) => r.reachAll > 1).length;
+  $('stats').innerHTML = [
+    [all.length, 'videos on the chart'],
+    [nf.format(totalViews), 'combined views'],
+    [ago(medianAge).replace(' ago', ''), 'median age'],
+    [`${Math.round((shared / (all.length || 1)) * 100)}%`, 'also trending elsewhere'],
+  ].map(([b, s]) => `<div class="stat"><b>${b}</b><span>${s}</span></div>`).join('');
+
+  // Categories
+  const counts = {};
+  for (const r of all) counts[r.v.k] = (counts[r.v.k] || 0) + 1;
+  const max = Math.max(...Object.values(counts), 1);
+  $('cats').innerHTML = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, n]) =>
+    `<button class="cat" data-cat="${k}" aria-pressed="${state.cat === k}">
+      <span>${esc(DATA.categories[k] || 'Other')}</span><span class="n">${n}</span>
+      <span class="track"><span class="fill" style="display:block;width:${(n / max) * 100}%;background:${colorFor(k)}"></span></span>
+    </button>`).join('');
+
+  $('filter-slot').innerHTML = state.cat
+    ? `<span class="active-filter">${esc(DATA.categories[state.cat])}<button id="clear-cat" aria-label="Clear category filter">×</button></span>` : '';
+  $('count').textContent = `${list.length} of ${all.length}`;
+
+  // Chart
+  $('chart').innerHTML = list.length ? list.map((r) => {
+    const v = r.v;
+    const url = `https://www.youtube.com/watch?v=${encodeURIComponent(r.id)}`;
+    const others = Object.entries(where[r.id]).sort((a, b) => a[1] - b[1]);
+    return `<li class="${r.pos <= 3 && state.sort === 'rank' ? 'top3' : ''}">
+      <div class="pos">${r.pos}${state.region === 'EU' ? `<small>best #${r.best}</small>` : ''}</div>
+      <div class="main">
+        <a class="title" href="${url}" target="_blank" rel="noopener">${esc(v.t)}</a>
+        <a class="channel" href="https://www.youtube.com/results?search_query=${encodeURIComponent(v.c)}" target="_blank" rel="noopener">${esc(v.c)}</a>
+        <div class="meta"><span>${ago(r.hours)}</span>${v.d ? `<span>${dur(v.d)}</span>` : ''}<span>${nf.format(v.l)} likes</span><span>${(r.like * 100).toFixed(1)}% like rate</span>${v.m ? `<span>${nf.format(v.m)} comments</span>` : ''}</div>
+        <div class="chips">
+          <button class="chip" data-cat="${v.k}"><i style="background:${colorFor(v.k)}"></i>${esc(DATA.categories[v.k] || 'Other')}</button>
+          ${others.map(([c, p]) => `<span class="flag ${c === state.region ? 'here' : ''}" title="#${p} in ${esc(DATA.regions[c])}">${c} #${p}</span>`).join('')}
+        </div>
+      </div>
+      <div class="nums">
+        <div><b>${nf.format(v.v)}</b><span>views</span></div>
+        <div><b>${nf.format(r.vel)}</b><span>views / hour</span><div class="vel"><div style="width:${Math.max(2, (r.vel / maxVel) * 100)}%"></div></div></div>
+      </div>
+    </li>`;
+  }).join('') : '<li class="empty">No videos match. Clear the search or category filter.</li>';
+}
+
+$('stamp').textContent = `Snapshot ${fetched.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' })}`;
+$('regions').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-r]');
+  if (!b) return;
+  state.region = b.dataset.r; state.cat = null; store.set('yt-region', state.region);
+  renderRegions(); render();
+});
+document.addEventListener('click', (e) => {
+  const c = e.target.closest('[data-cat]');
+  if (c) { state.cat = state.cat === c.dataset.cat ? null : c.dataset.cat; render(); }
+  if (e.target.id === 'clear-cat') { state.cat = null; render(); }
+});
+$('q').addEventListener('input', (e) => { state.q = e.target.value; render(); });
+$('sort').value = state.sort;
+$('sort').addEventListener('change', (e) => { state.sort = e.target.value; store.set('yt-sort', state.sort); render(); });
+renderRegions(); render();
+</script>
