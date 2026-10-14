@@ -1,4 +1,4 @@
-<title>YouTube Trend Browser</title>
+<title>Trend Snapshot</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
@@ -23,6 +23,7 @@
   color-scheme: dark; }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { background: var(--bg); color: var(--ink); font: 15px/1.45 var(--body); }
 .wrap { max-width: 1180px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 40px; display: grid; gap: 16px; }
 header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
@@ -92,15 +93,53 @@ ol.chart > li:first-child { border-top: 0; }
 }
 .empty { padding: 28px; text-align: center; color: var(--muted); }
 @media (prefers-reduced-motion: no-preference) { .vel div { transition: width .3s ease; } }
+
+/* Hottest topics: cards that expand in place to list the items behind them. */
+.topics-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+h2 { font: 700 20px/1.2 var(--display); margin: 0; letter-spacing: -0.01em; }
+.seg { display: inline-flex; background: var(--chip); border-radius: 8px; padding: 3px; }
+.seg button { border: 0; background: none; color: var(--muted); font: 500 14px var(--body); padding: 5px 11px; border-radius: 6px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); }
+.topics { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.topic { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
+.topics > li:has(> .topic[open]) { grid-column: 1 / -1; }
+.topic summary { list-style: none; cursor: pointer; padding: 12px 14px; display: grid; gap: 6px; }
+.topic summary::-webkit-details-marker { display: none; }
+.topic .row { display: flex; gap: 10px; align-items: baseline; }
+.topic .n { font: 600 13px var(--mono); color: var(--muted); min-width: 1.6em; }
+.topic.hot .n { color: var(--accent); }
+.topic .name { font: 700 17px/1.2 var(--display); overflow-wrap: anywhere; }
+.topic .sub { font: 12px var(--mono); color: var(--muted); }
+.heat { height: 4px; background: var(--chip); border-radius: 2px; overflow: hidden; }
+.heat i { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
+.badges { display: flex; flex-wrap: wrap; gap: 4px; }
+.badge { display: inline-grid; place-items: center; min-width: 26px; height: 20px; padding: 0 5px; border-radius: 5px; font: 700 10.5px/1 var(--body); color: #fff; }
+.topic ul { list-style: none; margin: 0; padding: 0 14px 12px; display: grid; gap: 0; }
+.topic li { display: flex; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.topic li a { color: var(--ink); font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+.topic li a:hover { text-decoration: underline; text-decoration-color: var(--accent); }
+.yt-missing { margin: 0; }
 </style>
 
 <div class="wrap">
   <header>
-    <h1>YouTube Trend Browser<span class="dot">.</span></h1>
+    <h1>Trend Snapshot<span class="dot">.</span></h1>
     <div class="stamp" id="stamp"></div>
   </header>
+  <section style="display:grid; gap:10px">
+    <div class="topics-head">
+      <h2>Hottest topics right now</h2>
+      <div class="seg" id="scope" role="group" aria-label="Region">
+        <button data-s="all">Everywhere</button><button data-s="se">Sweden</button><button data-s="int">International</button>
+      </div>
+    </div>
+    <p class="note">Ranked by how many different sources (news sites, Google searches, YouTube) mention a topic and how recently. <span id="src-count"></span> Click a topic to see what is behind it.</p>
+    <ol class="topics" id="topics"></ol>
+  </section>
+  <h2 id="yt-title">YouTube trending</h2>
+  <p class="note yt-missing" id="yt-missing" hidden>This snapshot was built without a YouTube API key, so it has no YouTube charts.</p>
   <nav class="regions" id="regions" aria-label="Region"></nav>
-  <div class="layout">
+  <div class="layout" id="yt-layout">
     <aside>
       <div class="panel">
         <div class="label" id="summary-label">Summary</div>
@@ -281,5 +320,36 @@ document.addEventListener('click', (e) => {
 $('q').addEventListener('input', (e) => { state.q = e.target.value; render(); });
 $('sort').value = state.sort;
 $('sort').addEventListener('change', (e) => { state.sort = e.target.value; store.set('yt-sort', state.sort); render(); });
-renderRegions(); render();
+
+// --- Hottest topics ---
+const badge = (id) => {
+  const s = DATA.sources[id] || { short: '?', color: '#6b7280', name: id };
+  return `<span class="badge" style="background:${esc(s.color)}${s.ink ? `;color:${esc(s.ink)}` : ''}" title="${esc(s.name)}">${esc(s.short)}</span>`;
+};
+function agoDate(d) { return d ? ago(Math.max(0, (fetched - new Date(d)) / 36e5)) : ''; }
+let scope = ['all', 'se', 'int'].includes(store.get('trend-scope')) ? store.get('trend-scope') : 'all';
+function renderTopics() {
+  for (const b of $('scope').children) b.setAttribute('aria-pressed', b.dataset.s === scope);
+  const topics = DATA.trends[scope] || [];
+  const max = topics[0]?.score || 1;
+  $('topics').innerHTML = topics.length ? topics.map((t, i) => `<li><details class="topic${i < 3 ? ' hot' : ''}">
+    <summary>
+      <span class="row"><span class="n">${i + 1}</span><span class="name">${esc(t.label)}</span></span>
+      <span class="heat"><i style="width:${Math.max(4, (t.score / max) * 100).toFixed(0)}%"></i></span>
+      <span class="sub">${t.sourceCount} sources · ${t.articleCount} items · ${t.kinds.join(' + ')}</span>
+      <span class="badges">${t.sources.map((s) => badge(s.id)).join('')}</span>
+    </summary>
+    <ul>${t.items.map((d) => `<li>${badge(d.source)}<div><a href="${esc(d.url)}" target="_blank" rel="noopener">${esc(d.title)}</a>
+      <div class="meta"><span>${esc(d.sourceName)}</span><span>${agoDate(d.publishedAt)}</span>${d.kind !== 'news' && d.region ? `<span>${esc(d.region)}</span>` : ''}</div></div></li>`).join('')}</ul>
+  </details></li>`).join('') : '<li class="empty">No topics in this snapshot.</li>';
+}
+$('scope').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-s]');
+  if (b) { scope = b.dataset.s; store.set('trend-scope', scope); renderTopics(); }
+});
+if (DATA.sourceCount) $('src-count').textContent = `${DATA.sourceCount.live} of ${DATA.sourceCount.total} sources were reachable.`;
+renderTopics();
+
+if (Object.keys(DATA.charts).length) { renderRegions(); render(); }
+else { $('yt-missing').hidden = false; $('regions').hidden = true; $('yt-layout').hidden = true; }
 </script>
