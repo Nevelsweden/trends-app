@@ -1,10 +1,12 @@
-// Small dependency-free server: serves the dashboard and proxies the two data
-// sources so the YouTube API key never reaches the browser.
+// Small dependency-free server: serves the dashboard, proxies YouTube, Google
+// Trends and the news feeds (so the YouTube API key never reaches the browser)
+// and computes cross-source trending topics.
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { parseTrendsRss, fetchGoogleTrends, fetchSource } = require('./feeds');
 const { SOURCES, selectSources } = require('./sources');
+const { buildDocs, scoreTopics } = require('./trends');
 
 loadEnv(path.join(__dirname, '.env'));
 
@@ -40,7 +42,6 @@ function cachedEntry(key, fn) {
   cache.set(key, entry);
   return entry.promise;
 }
-const cached = async (key, fn) => (await cachedEntry(key, fn)).value;
 
 // Fetch several news sources; one failing source never fails the whole response.
 async function loadNews(sources) {
@@ -54,9 +55,13 @@ async function loadNews(sources) {
   });
 }
 
-async function youtubeTrending(region) {
+const youtubeTrending = async (region) => (await youtubeEntry(region)).value;
+const googleTrends = async (region) => (await googleEntry(region)).value;
+const googleEntry = (region) => cachedEntry(`gt:${region}`, () => fetchGoogleTrends(region));
+
+async function youtubeEntry(region) {
   if (!API_KEY) throw new Error('YOUTUBE_API_KEY is not set (see .env.example)');
-  return cached(`yt:${region}`, async () => {
+  return cachedEntry(`yt:${region}`, async () => {
     const url = new URL('https://www.googleapis.com/youtube/v3/videos');
     url.search = new URLSearchParams({
       part: 'snippet,statistics,contentDetails', chart: 'mostPopular',
@@ -79,8 +84,34 @@ async function youtubeTrending(region) {
   });
 }
 
-async function googleTrends(region) {
-  return cached(`gt:${region}`, () => fetchGoogleTrends(region));
+// Which Google Trends / YouTube charts feed the topic detection per region filter.
+const TREND_REGIONS = { se: ['SE'], int: ['US', 'GB'], all: ['SE', 'US', 'GB'] };
+
+// One status row per non-news input, in the same shape as news sources.
+async function loadCharts(id, name, kind, regions, entry) {
+  const results = await Promise.allSettled(regions.map(entry));
+  const ok = results.map((r, i) => r.status === 'fulfilled' && { region: regions[i], fetchedAt: new Date(r.value.at).toISOString(), items: r.value.value }).filter(Boolean);
+  const failed = results.find((r) => r.status === 'rejected');
+  return {
+    id, name, kind, regions, ok: ok.length > 0, charts: ok,
+    fetchedAt: ok.map((c) => c.fetchedAt).sort()[0],
+    ...(failed && { error: failed.reason.message }),
+  };
+}
+
+async function loadTrends(scope) {
+  const regions = TREND_REGIONS[scope.region];
+  const [news, google, youtube] = await Promise.all([
+    loadNews(selectSources(scope)),
+    loadCharts('google', 'Google Trends', 'search', regions, googleEntry),
+    loadCharts('youtube', 'YouTube', 'video', regions, youtubeEntry),
+  ]);
+  const docs = buildDocs({ news, google: google.charts, youtube: youtube.charts });
+  // On the News and Tech tabs a topic must include at least one article.
+  const topics = scoreTopics(docs, { requireKind: scope.category === 'all' ? undefined : 'news' });
+  const status = [...news.map(({ items, ...s }) => ({ ...s, kind: 'news', count: items.length })),
+    ...[google, youtube].map(({ charts, ...s }) => ({ ...s, count: charts.reduce((n, c) => n + c.items.length, 0) }))];
+  return { ...scope, updatedAt: oldest(status), docCount: docs.length, topics, sources: status };
 }
 
 // Fetch one region, or merge all European ones.
@@ -136,10 +167,11 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/sources') {
       return send(res, 200, { sources: SOURCES.map(({ type, ...s }) => s) });
     }
-    if (url.pathname === '/api/news') {
+    if (url.pathname === '/api/news' || url.pathname === '/api/trends') {
       if (!SCOPES.region.includes(scope.region) || !SCOPES.category.includes(scope.category)) {
         return send(res, 400, { error: 'region must be all|se|int, category all|news|tech' });
       }
+      if (url.pathname === '/api/trends') return send(res, 200, await loadTrends(scope));
       const sources = await loadNews(selectSources(scope));
       return send(res, 200, { ...scope, updatedAt: oldest(sources), sources });
     }
@@ -167,4 +199,4 @@ const server = http.createServer(async (req, res) => {
 if (require.main === module) {
   server.listen(PORT, () => console.log(`Trends app on http://localhost:${PORT}`));
 }
-module.exports = { parseTrendsRss };
+module.exports = { parseTrendsRss, server };
