@@ -1,8 +1,8 @@
 {
   "name": "trends-app",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Overview of trending YouTube videos and Google search trends by region",
+  "description": "Trend spotter: what is trending across YouTube, Google search and major news sites, with cross-source topic detection",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
