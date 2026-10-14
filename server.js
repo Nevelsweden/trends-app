@@ -3,6 +3,8 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { parseTrendsRss, fetchGoogleTrends, fetchSource } = require('./feeds');
+const { SOURCES, selectSources } = require('./sources');
 
 loadEnv(path.join(__dirname, '.env'));
 
@@ -27,12 +29,29 @@ function loadEnv(file) {
 }
 
 const cache = new Map();
-async function cached(key, fn) {
+// Caches successful results for CACHE_MS; concurrent callers share one request.
+// Resolves to { value, at } so callers can report how fresh the data is.
+function cachedEntry(key, fn) {
   const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < CACHE_MS) return hit.value;
-  const value = await fn();
-  cache.set(key, { at: Date.now(), value });
-  return value;
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.promise;
+  const entry = { at: Date.now() };
+  entry.promise = Promise.resolve().then(fn).then((value) => ({ value, at: entry.at }));
+  entry.promise.catch(() => { if (cache.get(key) === entry) cache.delete(key); });
+  cache.set(key, entry);
+  return entry.promise;
+}
+const cached = async (key, fn) => (await cachedEntry(key, fn)).value;
+
+// Fetch several news sources; one failing source never fails the whole response.
+async function loadNews(sources) {
+  const results = await Promise.allSettled(sources.map((s) => cachedEntry(`news:${s.id}`, () => fetchSource(s))));
+  return sources.map((s, i) => {
+    const r = results[i];
+    const { feedUrl, type, ...meta } = s;
+    return r.status === 'fulfilled'
+      ? { ...meta, ok: true, fetchedAt: new Date(r.value.at).toISOString(), items: r.value.value }
+      : { ...meta, ok: false, error: r.reason.message, items: [] };
+  });
 }
 
 async function youtubeTrending(region) {
@@ -60,44 +79,8 @@ async function youtubeTrending(region) {
   });
 }
 
-// Google Trends has no official API; this uses the public "Trending now" RSS feed.
 async function googleTrends(region) {
-  return cached(`gt:${region}`, async () => {
-    const res = await fetch(`https://trends.google.com/trending/rss?geo=${region}`);
-    if (!res.ok) throw new Error(`Google Trends feed ${res.status}`);
-    return parseTrendsRss(await res.text(), region);
-  });
-}
-
-function parseTrendsRss(xml, region) {
-  const tag = (s, name) => {
-    const m = s.match(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`));
-    return m ? decode(m[1].replace(/^<!\[CDATA\[|\]\]>$/g, '').trim()) : '';
-  };
-  return [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].map((m, i) => {
-    const item = m[1];
-    const news = [...item.matchAll(/<ht:news_item>([\s\S]*?)<\/ht:news_item>/g)].map((n) => ({
-      title: tag(n[1], 'ht:news_item_title'),
-      url: tag(n[1], 'ht:news_item_url'),
-      source: tag(n[1], 'ht:news_item_source'),
-    }));
-    const traffic = tag(item, 'ht:approx_traffic');
-    return {
-      rank: i + 1,
-      query: tag(item, 'title'),
-      traffic,
-      trafficValue: Number(traffic.replace(/[^\d]/g, '')) || 0,
-      startedAt: tag(item, 'pubDate'),
-      picture: tag(item, 'ht:picture'),
-      news,
-      region,
-    };
-  });
-}
-
-function decode(s) {
-  return s.replace(/&(amp|lt|gt|quot|#39|apos);/g, (_, e) =>
-    ({ amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'", apos: "'" })[e]);
+  return cached(`gt:${region}`, () => fetchGoogleTrends(region));
 }
 
 // Fetch one region, or merge all European ones.
@@ -129,6 +112,14 @@ function mergeTrends(trends) {
 
 const MIME = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml' };
 
+const SCOPES = { region: ['all', 'se', 'int'], category: ['all', 'news', 'tech'] };
+
+// The age of the stalest data in a response (what "last updated" should show).
+function oldest(parts) {
+  const times = parts.filter((p) => p.fetchedAt).map((p) => p.fetchedAt).sort();
+  return times[0] || new Date().toISOString();
+}
+
 function send(res, status, data) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(data));
@@ -137,7 +128,21 @@ function send(res, status, data) {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const region = (url.searchParams.get('region') || 'SE').toUpperCase();
+  const scope = {
+    region: (url.searchParams.get('region') || 'all').toLowerCase(),
+    category: (url.searchParams.get('category') || 'all').toLowerCase(),
+  };
   try {
+    if (url.pathname === '/api/sources') {
+      return send(res, 200, { sources: SOURCES.map(({ type, ...s }) => s) });
+    }
+    if (url.pathname === '/api/news') {
+      if (!SCOPES.region.includes(scope.region) || !SCOPES.category.includes(scope.category)) {
+        return send(res, 400, { error: 'region must be all|se|int, category all|news|tech' });
+      }
+      const sources = await loadNews(selectSources(scope));
+      return send(res, 200, { ...scope, updatedAt: oldest(sources), sources });
+    }
     if (url.pathname === '/api/regions') {
       return send(res, 200, { regions: { EU: 'Europe (combined)', ...REGIONS } });
     }

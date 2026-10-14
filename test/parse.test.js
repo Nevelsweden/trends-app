@@ -1,7 +1,7 @@
 // Run with: node --test
 const test = require('node:test');
 const assert = require('node:assert');
-const { parseTrendsRss } = require('../server');
+const { parseTrendsRss } = require('../feeds');
 
 const SAMPLE = `<?xml version="1.0" encoding="UTF-8"?>
 <rss xmlns:ht="https://trends.google.com/trending/rss" version="2.0"><channel>
