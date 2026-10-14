@@ -104,6 +104,18 @@ test('Swedish genitive folds into the name', () => {
   assert.strictEqual(top.sourceCount, 3);
 });
 
+test('variants of a bigger topic are folded in, unrelated narrower topics are kept', () => {
+  const docs = [
+    doc('bbc', 'Tariffs from Trump bite'), doc('nyt', 'Senate defies Trump'), doc('dn', 'Kritik mot Trump'),
+    doc('svt', 'Nytt besked från Trump'), doc('yahoo', 'Polls: Trump slips'),
+    doc('guardian', 'Allies split over Donald Trump plan for Greenland'), doc('aljazeera', 'Denmark rejects Donald Trump on Greenland'),
+  ];
+  const got = labels(scoreTopics(docs, { now: NOW }));
+  assert.strictEqual(got[0], 'Trump');
+  assert.ok(!got.includes('Donald Trump'), got.join());
+  assert.ok(got.includes('Greenland'), got.join());
+});
+
 test('requireKind keeps only topics with that kind of doc', () => {
   const docs = [doc('google', 'champions league', 0, 'search'), doc('youtube', 'Champions League highlights', 0, 'video')];
   assert.strictEqual(scoreTopics(docs, { now: NOW }).length, 1);

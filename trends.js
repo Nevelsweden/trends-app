@@ -18,6 +18,7 @@ const PHRASE_BONUS = 1.3;     // multi-word names ("Real Madrid") are the most s
 const PLAIN_PENALTY = 0.7;    // ordinary words ("prices") need more sources to rank
 const ABSORB = 0.6;           // a phrase replaces a shorter term if it covers >=60% of its docs
 const OVERLAP = 0.6;          // skip a topic whose docs mostly match (Jaccard) a higher-ranked one
+const VARIANT = 0.8;          // ...or shares a word with one and has >=80% of its docs covered
 const MIN_SOURCES = 2;
 
 const EN = `a about above after again against ago all almost also am among an and another any are around as at
@@ -251,14 +252,17 @@ function scoreTopics(docs, { now = Date.now(), limit = 30, minSources = MIN_SOUR
     b.score - a.score || b.docs.size - a.docs.size || cased(b) - cased(a) || a.n - b.n);
 
   // 5. Skip topics that are essentially the same set of articles as a
-  //    higher-ranked one. Jaccard rather than containment, so a broad topic
-  //    ("Trump") does not hide a narrower one ("Greenland").
+  //    higher-ranked one (Jaccard), or a variant of it ("Donald Trump" under
+  //    "Trump": shares a word and its articles are mostly already covered).
+  //    A broad topic ("Trump") never hides an unrelated narrower one ("Greenland").
   const picked = [];
   for (const e of list) {
+    const words = new Set(e.key.split(' '));
     const dup = picked.some((p) => {
       let shared = 0;
       for (const i of e.docs) if (p.docs.has(i)) shared++;
-      return shared / (e.docs.size + p.docs.size - shared) >= OVERLAP;
+      if (shared / (e.docs.size + p.docs.size - shared) >= OVERLAP) return true;
+      return p.key.split(' ').some((w) => words.has(w)) && shared / e.docs.size >= VARIANT;
     });
     if (!dup) picked.push(e);
     if (picked.length >= limit) break;
