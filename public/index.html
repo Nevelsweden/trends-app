@@ -3,31 +3,102 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Trends Overview</title>
+<meta name="color-scheme" content="light dark">
+<title>Trend Spotter</title>
 <link rel="stylesheet" href="style.css">
+<script>try { const t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
 </head>
 <body>
-<header>
-  <h1>Trends Overview</h1>
-  <nav id="regions" aria-label="Region"></nav>
+<header class="top">
+  <div class="brand">
+    <h1>Trend Spotter<span class="dot">.</span></h1>
+    <p class="tagline">What news, search and video are all talking about right now</p>
+    <p id="updated" class="stamp" aria-live="polite"></p>
+  </div>
+  <div class="actions">
+    <button id="refresh" class="icon-btn" title="Refresh" aria-label="Refresh">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5"/></svg>
+    </button>
+    <button id="theme" class="icon-btn" title="Theme: auto" aria-label="Theme: auto">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" class="fill"/></svg>
+    </button>
+  </div>
 </header>
+
+<nav class="tabs" role="tablist" aria-label="View">
+  <button role="tab" data-tab="all">All</button>
+  <button role="tab" data-tab="news">News</button>
+  <button role="tab" data-tab="tech">Tech &amp; design</button>
+  <button role="tab" data-tab="youtube">YouTube</button>
+  <button role="tab" data-tab="google">Search</button>
+</nav>
+
+<div class="toolbar">
+  <div id="scope" class="segmented" role="radiogroup" aria-label="Region">
+    <button role="radio" data-scope="all">Everywhere</button>
+    <button role="radio" data-scope="se">Sweden</button>
+    <button role="radio" data-scope="int">International</button>
+  </div>
+  <div id="countries" class="countries" aria-label="Country" hidden></div>
+  <details id="health" class="health" hidden>
+    <summary></summary>
+    <ul></ul>
+  </details>
+</div>
+
 <main>
-  <section>
-    <div class="section-head">
+  <section id="topics-view" class="block" aria-labelledby="topics-title">
+    <div class="block-head">
+      <h2 id="topics-title">Hottest topics right now</h2>
+      <p class="hint">Ranked by how many different sources mention a topic, how recently, and whether it also shows up in searches and videos.</p>
+    </div>
+    <ol id="topics" class="topic-grid"></ol>
+    <button id="more-topics" class="more" hidden></button>
+  </section>
+
+  <section id="headlines-view" class="block" aria-labelledby="headlines-title">
+    <div class="block-head">
+      <h2 id="headlines-title">Latest headlines</h2>
+      <input id="headline-filter" type="search" placeholder="Filter headlines" aria-label="Filter headlines">
+    </div>
+    <div id="headlines" class="source-grid"></div>
+  </section>
+
+  <section id="youtube-view" class="block panel" hidden>
+    <div class="block-head">
       <h2>YouTube trending</h2>
-      <input id="yt-filter" type="search" placeholder="Filter videos">
+      <input id="yt-filter" type="search" placeholder="Filter videos" aria-label="Filter videos">
     </div>
     <ol id="youtube" class="list"></ol>
   </section>
-  <section>
-    <div class="section-head">
+
+  <section id="google-view" class="block panel" hidden>
+    <div class="block-head">
       <h2>Google search trends</h2>
-      <input id="gt-filter" type="search" placeholder="Filter searches">
+      <input id="gt-filter" type="search" placeholder="Filter searches" aria-label="Filter searches">
     </div>
     <ol id="google" class="list"></ol>
   </section>
 </main>
-<footer>YouTube data from the YouTube Data API (most popular chart). Google data from the public Google Trends "Trending now" RSS feed. Cached for 10 minutes.</footer>
+
+<dialog id="topic-dialog" aria-labelledby="dialog-title">
+  <div class="dialog-head">
+    <div>
+      <h3 id="dialog-title"></h3>
+      <p id="dialog-meta" class="meta"></p>
+    </div>
+    <button class="icon-btn" data-close aria-label="Close">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div id="dialog-sources" class="badges"></div>
+  <ul id="dialog-items" class="items"></ul>
+</dialog>
+
+<footer>
+  Headlines come from each publication's public RSS/Atom feed and the Hacker News API; every item links to the original article.
+  YouTube data from the YouTube Data API, searches from the Google Trends "Trending now" feed. Cached for 10 minutes.
+</footer>
 <script src="app.js"></script>
 </body>
 </html>
