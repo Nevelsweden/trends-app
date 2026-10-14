@@ -13,7 +13,7 @@ const SOURCES = [
     feedUrl: 'https://news.yahoo.com/rss/' },
   { id: 'bbc', name: 'BBC News', category: 'news', region: 'INT', short: 'BBC', color: '#b80000',
     feedUrl: 'https://feeds.bbci.co.uk/news/rss.xml' },
-  { id: 'guardian', name: 'The Guardian', category: 'news', region: 'INT', short: 'G', color: '#052962',
+  { id: 'guardian', name: 'The Guardian', category: 'news', region: 'INT', short: 'Gdn', color: '#052962',
     feedUrl: 'https://www.theguardian.com/international/rss' },
   { id: 'nyt', name: 'New York Times', category: 'news', region: 'INT', short: 'NYT', color: '#222222',
     feedUrl: 'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml' },

@@ -180,10 +180,13 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname === '/api/youtube' || url.pathname === '/api/google') {
       if (region !== 'EU' && !REGIONS[region]) return send(res, 400, { error: 'Unknown region' });
-      const items = url.pathname === '/api/youtube'
+      const yt = url.pathname === '/api/youtube';
+      const items = yt
         ? await forRegion(region, youtubeTrending, mergeVideos)
         : await forRegion(region, googleTrends, mergeTrends);
-      return send(res, 200, { region, items });
+      const stamps = (region === 'EU' ? EUROPE : [region])
+        .map((r) => cache.get(`${yt ? 'yt' : 'gt'}:${r}`)?.at).filter(Boolean);
+      return send(res, 200, { region, updatedAt: new Date(Math.min(...stamps, Date.now())).toISOString(), items });
     }
     const file = path.join(__dirname, 'public', url.pathname === '/' ? 'index.html' : url.pathname);
     if (!file.startsWith(path.join(__dirname, 'public')) || !fs.existsSync(file)) {
